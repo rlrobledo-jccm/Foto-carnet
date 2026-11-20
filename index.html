@@ -33,7 +33,7 @@ h2{font-size:17px;font-weight:700;margin:28px 0 10px}
 .custom input{width:84px;font:inherit;font-size:16px;padding:8px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 #stage{display:flex;flex-direction:column;align-items:center;margin-top:20px;padding:22px 12px;background:var(--soft);border-radius:14px}
 #cv{touch-action:none;background:#fff;box-shadow:0 1px 0 #0002,0 12px 30px -12px #0005;cursor:grab;display:block}
-.dim{font-size:13px;color:var(--mut);margin-top:10px;white-space:nowrap}
+.dim{font-size:13px;color:var(--mut);margin-top:10px;text-align:center}
 .btns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px;width:100%;max-width:460px}
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--ink);background:var(--bg);color:var(--ink);font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-align:center;line-height:1.2}
 .btn.pri{background:var(--red);border-color:var(--red);color:#fff}
@@ -96,12 +96,15 @@ small{color:var(--mut);font-size:13px}
 
   <div id="adj" class="off">
     <h2>2 · Ajusta</h2>
-    <p class="sub" style="margin:0 0 6px">Arrastra la foto para moverla. La coronilla va en la línea roja de arriba y la barbilla en la de abajo.</p>
+    <p class="sub" style="margin:0 0 6px">Arrastra y amplía hasta que la barbilla toque la línea roja de abajo y la coronilla (parte alta de la cabeza, sin contar el volumen del pelo) quede dentro de la franja roja. Cuanto más abajo en la franja, más aire alrededor de la cara; si tienes mucho pelo, apunta a la parte baja para que no quede cortado.</p>
     <div class="ctl"><label for="z">Zoom</label><input type="range" id="z" min="0.5" max="4" step="0.01" value="1"><output id="zo">100%</output></div>
     <div class="ctl"><label for="r">Inclinación</label><input type="range" id="r" min="-15" max="15" step="0.5" value="0"><output id="ro">0°</output></div>
     <div class="ctl"><label for="b">Brillo</label><input type="range" id="b" min="-40" max="40" step="1" value="0"><output id="bo">0</output></div>
     <div class="ctl"><label for="c">Contraste</label><input type="range" id="c" min="-40" max="40" step="1" value="0"><output id="co">0</output></div>
     <div class="ctl"><label for="s">Sombras</label><input type="range" id="s" min="0" max="100" step="1" value="0"><output id="so">0</output></div>
+    <label class="check"><input type="checkbox" id="bg"> Fondo blanco con IA (quita la pared y sus sombras)</label>
+    <p class="dim" id="aiMsg" role="status" style="margin:0 0 4px;text-align:left"></p>
+    <div class="ctl" id="btRow"><label for="bt">Limpiar bordes</label><input type="range" id="bt" min="0" max="100" step="1" value="40"><output id="bto">40</output></div>
     <label class="check"><input type="checkbox" id="g" checked> Mostrar guías</label>
     <div class="row">
       <button class="btn" id="flip" type="button">Voltear espejo</button>
@@ -147,19 +150,26 @@ small{color:var(--mut);font-size:13px}
 {
 const $=s=>document.querySelector(s);
 const P=[
-  {id:'es',n:'España',d:'DNI · NIE · pasaporte',w:26,h:32,head:.74,top:.08},
-  {id:'eu',n:'UE / Schengen',d:'Visado · Reino Unido',w:35,h:45,head:.76,top:.07},
-  {id:'us',n:'EE. UU.',d:'2×2 in · pasaporte',w:51,h:51,head:.6,top:.12},
-  {id:'ca',n:'Canadá',d:'Pasaporte',w:50,h:70,head:.48,top:.17},
-  {id:'cn',n:'China',d:'Visado',w:33,h:48,head:.66,top:.08},
-  {id:'x',n:'Otro',d:'Medida libre',w:35,h:45,head:.74,top:.08}
+  // hmin/hmax: altura de la cabeza (barbilla–coronilla) en mm según la norma; chin: barbilla en mm desde arriba
+  {id:'es',n:'España',d:'DNI · NIE · pasaporte',w:26,h:32,hmin:20,hmax:25,chin:27.5}, // el RD 1553/2005 no fija %; 25 mm ≈ 78 % es el máximo ICAO
+  {id:'eu',n:'Schengen',d:'Visados UE · norma ICAO',w:35,h:45,hmin:32,hmax:36,chin:39.5},
+  {id:'uk',n:'Reino Unido',d:'Pasaporte',w:35,h:45,hmin:29,hmax:34,chin:39},
+  {id:'us',n:'EE. UU.',d:'2×2 in · pasaporte',w:51,h:51,hmin:25,hmax:35,chin:39},
+  {id:'ca',n:'Canadá',d:'Pasaporte',w:50,h:70,hmin:31,hmax:36,chin:50},
+  {id:'cn',n:'China',d:'Visado',w:33,h:48,hmin:28,hmax:33,chin:37.5},
+  {id:'x',n:'Otro',d:'Medida libre',w:35,h:45,hmin:.7,hmax:.8,chin:.88,rel:true}
 ];
 let curId='es';
 try{curId=localStorage.getItem('fc-size')||'es'}catch(e){}
 if(!P.some(p=>p.id===curId))curId='es';
-const cur=()=>{const p=P.find(p=>p.id===curId);if(p.id!=='x')return p;const w=+$('#cw').value||35,h=+$('#ch').value||45;return {...p,w:Math.min(100,Math.max(15,w)),h:Math.min(100,Math.max(15,h))}};
+const cur=()=>{
+  let p=P.find(p=>p.id===curId);
+  if(p.id==='x'){const w=+$('#cw').value||35,h=+$('#ch').value||45;p={...p,w:Math.min(100,Math.max(15,w)),h:Math.min(100,Math.max(15,h))};p={...p,hmin:p.hmin*p.h,hmax:p.hmax*p.h,chin:p.chin*p.h}}
+  const lo=p.hmin/p.h,hi=p.hmax/p.h,ch=p.chin/p.h,head=(lo+hi)/2;
+  return {...p,lo,hi,ch,head,top:ch-head};
+};
 
-const st={img:null,z:1,ox:0,oy:0,rot:0,br:0,ct:0,sh:0,flip:false};
+const st={img:null,src:null,alpha:null,cut:null,aiFailed:false,z:1,ox:0,oy:0,rot:0,br:0,ct:0,sh:0,bg:false,bt:40,flip:false};
 const cv=$('#cv'),ctx=cv.getContext('2d');
 
 function chips(){
@@ -169,9 +179,9 @@ function chips(){
 
 function paint(c,W,H){
   c.save();c.fillStyle='#fff';c.fillRect(0,0,W,H);
-  const i=st.img;
+  const i=st.bg&&st.cut?st.cut:st.src;
   if(i){
-    const iw=i.naturalWidth,ih=i.naturalHeight,s=Math.max(W/iw,H/ih)*st.z;
+    const iw=i.width,ih=i.height,s=Math.max(W/iw,H/ih)*st.z;
     c.translate(W/2+st.ox*H,H/2+st.oy*H);c.rotate(st.rot*Math.PI/180);c.scale(st.flip?-s:s,s);
     c.imageSmoothingQuality='high';c.drawImage(i,-iw/2,-ih/2);
   }
@@ -202,24 +212,116 @@ function adjust(c,W,H){
   c.putImageData(d,0,0);
 }
 function guides(c,W,H,p,ghost){
-  const top=p.top*H,head=p.head*H,chin=top+head,cx=W/2,rx=head*.36,ry=head/2,cy=top+ry;
+  const top=p.top*H,head=p.head*H,chin=p.ch*H,cx=W/2,rx=head*.32,ry=head/2,cy=top+ry,b1=chin-p.hi*H,b2=chin-p.lo*H;
   if(ghost){
     c.fillStyle='#e9e9e9';
     c.beginPath();c.ellipse(cx,cy,rx,ry,0,0,7);c.fill();
-    c.beginPath();c.moveTo(cx-rx*.55,chin-head*.05);c.quadraticCurveTo(cx-W*.5,chin+head*.08,cx-W*.55,H);c.lineTo(cx+W*.55,H);c.quadraticCurveTo(cx+W*.5,chin+head*.08,cx+rx*.55,chin-head*.05);c.fill();
+    c.beginPath();c.moveTo(cx-rx*.5,chin-head*.08);c.lineTo(cx-rx*.5,chin+head*.04);c.quadraticCurveTo(cx-W*.5,chin+head*.1,cx-W*.55,H);c.lineTo(cx+W*.55,H);c.quadraticCurveTo(cx+W*.5,chin+head*.1,cx+rx*.5,chin+head*.04);c.lineTo(cx+rx*.5,chin-head*.08);c.fill();
   }
   const lw=Math.max(1,W/260);
+  c.fillStyle='rgba(228,0,43,.13)';c.fillRect(0,b1,W,b2-b1);
   c.lineWidth=lw;c.strokeStyle='rgba(228,0,43,.9)';c.setLineDash([lw*5,lw*4]);
-  [top,chin].forEach(y=>{c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke()});
+  [b1,b2,chin].forEach(y=>{c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke()});
   c.setLineDash([]);c.strokeStyle='rgba(228,0,43,.55)';
   c.beginPath();c.ellipse(cx,cy,rx,ry,0,0,7);c.stroke();
   c.strokeStyle='rgba(0,0,0,.25)';c.setLineDash([lw*2,lw*4]);
   const eye=top+head*.48;c.beginPath();c.moveTo(cx-rx*1.5,eye);c.lineTo(cx+rx*1.5,eye);c.stroke();
   c.beginPath();c.moveTo(cx,0);c.lineTo(cx,H);c.stroke();c.setLineDash([]);
 }
+// ---- Fondo blanco con IA: MODNet (recorte de retrato con pelo) vía Transformers.js, todo en el navegador ----
+const TJS='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+let aiP=null,aiBusy=false;
+const aiMsg=t=>{$('#aiMsg').textContent=t};
+function loadModel(){
+  if(!aiP)aiP=(async()=>{
+    aiMsg('Descargando el modelo de IA (≈25 MB, solo la primera vez)…');
+    const T=await import(TJS);T.env.allowLocalModels=false;
+    let model;
+    if(navigator.gpu){try{model=await T.AutoModel.from_pretrained('Xenova/modnet',{dtype:'fp32',device:'webgpu'})}catch(e){model=null}}
+    if(!model)model=await T.AutoModel.from_pretrained('Xenova/modnet',{dtype:'fp32',device:'wasm'});
+    const proc=await T.AutoProcessor.from_pretrained('Xenova/modnet');
+    return {T,model,proc};
+  })().catch(e=>{aiP=null;throw e});
+  return aiP;
+}
+async function runAI(){
+  if(aiBusy||!st.src)return;aiBusy=true;
+  const src=st.src;
+  try{
+    const {T,model,proc}=await loadModel();
+    aiMsg('Recortando la foto…');
+    const img=T.RawImage.fromCanvas?await T.RawImage.fromCanvas(src):await T.RawImage.fromBlob(await new Promise(r=>src.toBlob(r,'image/png')));
+    const {pixel_values}=await proc(img);
+    const {output}=await model({input:pixel_values});
+    const m=await T.RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(src.width,src.height);
+    if(src!==st.src)return; // llegó otra foto mientras tanto
+    st.alpha=m.data;st.aiFailed=false;buildCut();
+    aiMsg('Fondo cambiado con IA. Ajusta «Limpiar bordes» si queda un halo.');
+  }catch(e){
+    console.error(e);st.aiFailed=true;st.cut=null;
+    aiMsg('No se pudo usar la IA (sin conexión o navegador no compatible). Uso el método simple por color.');
+  }finally{aiBusy=false;draw()}
+}
+// Compone sobre blanco quitando el color de la pared de los bordes semitransparentes (pelo)
+function buildCut(){
+  const s=st.src,A=st.alpha;if(!s||!A)return;
+  const W=s.width,H=s.height,d=s.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H),a=d.data;
+  const step=A.length===W*H?1:A.length/(W*H)|0;
+  // color de la pared estimado por zonas (media ponderada por lo que NO es persona)
+  const gw=40,gh=Math.max(2,Math.round(H*gw/W)),N=gw*gh,num=new Float32Array(N*3),den=new Float32Array(N);
+  let gr=0,gg=0,gb=0,gn=0;
+  for(let y=0;y<H;y+=2){const cy=Math.min(gh-1,y*gh/H|0);for(let x=0;x<W;x+=2){
+    const i=y*W+x,w=1-A[i*step]/255;if(w<.05)continue;const k=i*4,c=cy*gw+Math.min(gw-1,x*gw/W|0);
+    num[c*3]+=a[k]*w;num[c*3+1]+=a[k+1]*w;num[c*3+2]+=a[k+2]*w;den[c]+=w;gr+=a[k]*w;gg+=a[k+1]*w;gb+=a[k+2]*w;gn+=w}}
+  const G=gn?[gr/gn,gg/gn,gb/gn]:[235,235,235];
+  for(let pass=0;pass<4;pass++){const n2=num.slice(),d2=den.slice();
+    for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){let sr=0,sg=0,sb=0,sd=0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=x+dx;if(yy<0||xx<0||yy>=gh||xx>=gw)continue;const c=yy*gw+xx;sr+=n2[c*3];sg+=n2[c*3+1];sb+=n2[c*3+2];sd+=d2[c]}
+      const c=y*gw+x;num[c*3]=sr/9;num[c*3+1]=sg/9;num[c*3+2]=sb/9;den[c]=sd/9}}
+  const bc=document.createElement('canvas');bc.width=gw;bc.height=gh;const bx=bc.getContext('2d'),bd=bx.createImageData(gw,gh);
+  for(let c=0;c<N;c++){const ok=den[c]>.02;for(let j=0;j<3;j++)bd.data[c*4+j]=ok?num[c*3+j]/den[c]:G[j];bd.data[c*4+3]=255}
+  bx.putImageData(bd,0,0);
+  const up=document.createElement('canvas');up.width=W;up.height=H;const ux=up.getContext('2d',{willReadFrequently:true});
+  ux.imageSmoothingQuality='high';ux.drawImage(bc,0,0,W,H);const B=ux.getImageData(0,0,W,H).data;
+  const lo=st.bt/100*.3,o=new ImageData(W,H),q=o.data;
+  for(let i=0,k=0;i<W*H;i++,k+=4){
+    let al=(A[i*step]/255-lo)/(1-lo);al=al<0?0:al>1?1:al;
+    if(al<.02){q[k]=q[k+1]=q[k+2]=255}
+    else{const f=1-al;q[k]=a[k]+f*(255-B[k]);q[k+1]=a[k+1]+f*(255-B[k+1]);q[k+2]=a[k+2]+f*(255-B[k+2])}
+    q[k+3]=255;
+  }
+  const c=document.createElement('canvas');c.width=W;c.height=H;c.getContext('2d').putImageData(o,0,0);st.cut=c;
+}
+// Plan B sin IA: detecta la pared por su color desde los bordes (relleno por inundación) y la pinta de blanco con borde suave
+function whiten(c,W,H){
+  if(!st.bg||!st.img||st.cut||!st.aiFailed)return;
+  const sw=Math.min(220,W),sh=Math.max(2,Math.round(H*sw/W)),m=document.createElement('canvas');m.width=sw;m.height=sh;
+  const mx=m.getContext('2d',{willReadFrequently:true});mx.imageSmoothingQuality='high';mx.drawImage(c.canvas,0,0,sw,sh);
+  const d=mx.getImageData(0,0,sw,sh),a=d.data,n=sw*sh;
+  const L=new Float32Array(n),cr=new Float32Array(n),cg=new Float32Array(n);
+  for(let i=0,k=0;i<n;i++,k+=4){const r=a[k],g=a[k+1],b=a[k+2],t=r+g+b+1;L[i]=.299*r+.587*g+.114*b;cr[i]=r/t;cg[i]=g/t}
+  // referencia: las muestras más claras del borde superior y de los laterales (2/3 de arriba)
+  const sm=[];for(let x=0;x<sw;x++)sm.push(x);for(let y=1;y<sh*.67;y++){sm.push(y*sw);sm.push(y*sw+sw-1)}
+  sm.sort((p,q)=>L[q]-L[p]);const top=sm.slice(0,Math.max(5,Math.round(sm.length*.35)));
+  const med=arr=>{const v=top.map(i=>arr[i]).sort((p,q)=>p-q);return v[v.length>>1]};
+  const rL=med(L),rr=med(cr),rg=med(cg);
+  const t=st.bt/100,ctol=.012+.035*t,floor=rL*(.8-.45*t);
+  const ok=i=>L[i]>=floor&&cr[i]-rr<ctol*.6&&Math.hypot(cr[i]-rr,cg[i]-rg)<=ctol*(1+.5*(rL-L[i])/Math.max(rL,1));
+  const mask=new Uint8Array(n),q=new Int32Array(n);let qh=0,qt=0;
+  const seed=i=>{if(!mask[i]&&ok(i)){mask[i]=1;q[qt++]=i}};
+  for(let x=0;x<sw;x++)seed(x);for(let y=0;y<sh*.85;y++){seed(y*sw);seed(y*sw+sw-1)}
+  while(qh<qt){const i=q[qh++],x=i%sw;if(x>0)seed(i-1);if(x<sw-1)seed(i+1);if(i>=sw)seed(i-sw);if(i<n-sw)seed(i+sw)}
+  // cierra huecos de un píxel dentro del fondo
+  for(let i=sw;i<n-sw;i++){const x=i%sw;if(!mask[i]&&x>0&&x<sw-1&&mask[i-1]+mask[i+1]+mask[i-sw]+mask[i+sw]>=3)mask[i]=2}
+  for(let i=0,k=0;i<n;i++,k+=4){a[k]=a[k+1]=a[k+2]=255;a[k+3]=mask[i]?255:0}
+  mx.putImageData(d,0,0);
+  const f=document.createElement('canvas');f.width=sw;f.height=sh;const fx=f.getContext('2d');
+  if('filter' in fx)fx.filter='blur(0.6px)';fx.drawImage(m,0,0);
+  c.save();c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';c.drawImage(f,0,0,W,H);c.restore();
+}
 function draw(){
   const W=cv.width,H=cv.height,p=cur();
-  paint(ctx,W,H);adjust(ctx,W,H);
+  paint(ctx,W,H);adjust(ctx,W,H);whiten(ctx,W,H);
   if(!st.img)guides(ctx,W,H,p,true);
   else if($('#g').checked)guides(ctx,W,H,p,false);
 }
@@ -227,7 +329,8 @@ function size(){
   const p=cur(),box=$('#stage'),maxW=Math.min(box.clientWidth-24,400),maxH=Math.min(innerHeight*.55,480),a=p.w/p.h;
   let w=maxW,h=w/a;if(h>maxH){h=maxH;w=h*a}
   const r=devicePixelRatio||1;cv.style.width=w+'px';cv.style.height=h+'px';cv.width=Math.round(w*r);cv.height=Math.round(h*r);
-  $('#dim').textContent=`${p.w} × ${p.h} mm · ${Math.round(p.w/25.4*300)}×${Math.round(p.h/25.4*300)} px a 300 ppp`;
+  const r1=x=>Math.round(x*10)/10;
+  $('#dim').textContent=`${p.w} × ${p.h} mm · cabeza ${r1(p.hmin)}–${r1(p.hmax)} mm · ${Math.round(p.w/25.4*300)}×${Math.round(p.h/25.4*300)} px`;
   fitText();draw();
 }
 const ro=new ResizeObserver(size);ro.observe($('#stage'));
@@ -235,15 +338,24 @@ const ro=new ResizeObserver(size);ro.observe($('#stage'));
 function sync(){
   $('#z').value=st.z;$('#zo').value=Math.round(st.z*100)+'%';
   $('#r').value=st.rot;$('#ro').value=st.rot+'°';
-  $('#b').value=st.br;$('#bo').value=st.br;$('#c').value=st.ct;$('#co').value=st.ct;$('#s').value=st.sh;$('#so').value=st.sh;
+  $('#b').value=st.br;$('#bo').value=st.br;$('#c').value=st.ct;$('#co').value=st.ct;$('#s').value=st.sh;$('#so').value=st.sh;$('#bg').checked=st.bg;$('#bt').value=st.bt;$('#bto').value=st.bt;$('#btRow').classList.toggle('off',!st.bg);
 }
 function setZ(z){st.z=Math.min(4,Math.max(.5,z));sync()}
-function resetSt(){Object.assign(st,{z:1,ox:0,oy:0,rot:0,br:0,ct:0,sh:0});sync();draw()}
+function resetSt(){Object.assign(st,{z:1,ox:0,oy:0,rot:0,br:0,ct:0,sh:0,bg:false,bt:40});sync();draw()}
 
 function load(file){
   if(!file)return;
   const url=URL.createObjectURL(file),im=new Image();
-  im.onload=()=>{st.img=im;st.flip=false;resetSt();$('#adj').classList.remove('off');$('#out').classList.remove('on')};
+  im.onload=()=>{
+    // copia de trabajo de como mucho 2400 px de lado
+    const k=Math.min(1,2400/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');
+    c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);
+    const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(im,0,0,c.width,c.height);
+    URL.revokeObjectURL(url);
+    const keep=st.bg,keepT=st.bt;st.img=im;st.src=c;st.alpha=null;st.cut=null;st.flip=false;resetSt();st.bg=keep;st.bt=keepT;sync();
+    $('#adj').classList.remove('off');$('#out').classList.remove('on');
+    if(st.bg)runAI();else draw();
+  };
   im.onerror=()=>{$('#dim').textContent='No se pudo abrir esa imagen. Prueba con JPG o PNG.'};
   im.src=url;
 }
@@ -259,7 +371,7 @@ async function openLive(f){
   }catch(e){canLive=false;$('#dim').textContent='No hay acceso a la cámara en directo; pulsa otra vez para usar la cámara del móvil.';closeLive();return}
   vid.srcObject=stream;vid.classList.toggle('mir',facing==='user');
   const p=cur();$('#frame').style.aspectRatio=p.w+'/'+p.h;
-  const ov=$('#ov'),ry=p.head*50;ov.setAttribute('cy',p.top*100+ry);ov.setAttribute('ry',ry);ov.setAttribute('rx',p.head*36*p.h/p.w);
+  const ov=$('#ov'),ry=p.head*50;ov.setAttribute('cy',p.top*100+ry);ov.setAttribute('ry',ry);ov.setAttribute('rx',p.head*32*p.h/p.w);
   torchOn=false;lit=false;$('#live').classList.remove('lit');$('#lTorch').setAttribute('aria-pressed','false');
   $('#lTorch').textContent=facing==='user'?'Luz':'Linterna';note('');
   $('#live').classList.add('on');document.body.style.overflow='hidden';
@@ -316,13 +428,16 @@ $('#b').addEventListener('input',e=>{st.br=+e.target.value;sync();draw()});
 $('#c').addEventListener('input',e=>{st.ct=+e.target.value;sync();draw()});
 $('#s').addEventListener('input',e=>{st.sh=+e.target.value;sync();draw()});
 $('#g').addEventListener('change',draw);
+$('#bg').addEventListener('change',e=>{st.bg=e.target.checked;sync();if(st.bg&&!st.cut)runAI();draw()});
+let cutRaf=0;
+$('#bt').addEventListener('input',e=>{st.bt=+e.target.value;sync();if(st.alpha){cancelAnimationFrame(cutRaf);cutRaf=requestAnimationFrame(()=>{buildCut();draw()})}else draw()});
 $('#flip').addEventListener('click',()=>{st.flip=!st.flip;draw()});
 $('#reset').addEventListener('click',resetSt);
 $('#chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;curId=b.dataset.id;try{localStorage.setItem('fc-size',curId)}catch(err){}chips();size();$('#out').classList.remove('on')});
 ['#cw','#ch'].forEach(id=>$(id).addEventListener('input',size));
 
 const MM=300/25.4;
-function photo(){const p=cur(),W=Math.round(p.w*MM),H=Math.round(p.h*MM),c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');paint(x,W,H);adjust(x,W,H);return c}
+function photo(){const p=cur(),W=Math.round(p.w*MM),H=Math.round(p.h*MM),c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');paint(x,W,H);adjust(x,W,H);whiten(x,W,H);return c}
 function layout(pw,ph,W,H){const g=Math.round(3*MM),cols=Math.floor((W-g)/(pw+g)),rows=Math.floor((H-g)/(ph+g));return {cols,rows,n:cols*rows,g,W,H}}
 function bestLayout(){const p=cur(),pw=Math.round(p.w*MM),ph=Math.round(p.h*MM),a=layout(pw,ph,1800,1200),b=layout(pw,ph,1200,1800);return {L:a.n>=b.n?a:b,pw,ph}}
 function fitText(){const {L}=bestLayout();$('#fit').textContent=L.n?`La hoja 10×15 cm lleva ${L.n} copias con líneas de corte. Imprímela a tamaño real.`:'Esta medida no cabe en una hoja 10×15.'}

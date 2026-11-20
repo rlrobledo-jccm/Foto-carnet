@@ -9,8 +9,9 @@ Todo se procesa en el navegador; las fotos no se suben a ningún servidor.
 - **Cámara en directo** (frontal o trasera) con guía de encuadre y temporizador de 3 s. Si el navegador no da acceso, usa la cámara nativa del móvil.
 - **Linterna**: con la cámara trasera enciende el LED del móvil (funciona en Chrome para Android; en iPhone depende de la versión de iOS). Con la selfie, la pantalla se pone en blanco para iluminar la cara.
 - **Galería**: también puedes partir de una foto que ya tengas.
-- **Tamaños**: España (DNI, NIE, pasaporte · 26×32 mm), UE/Schengen y Reino Unido (35×45), EE. UU. (2×2 in), Canadá (50×70), China (33×48) y medida libre.
+- **Tamaños** con la altura de cabeza de cada norma (barbilla–coronilla): España DNI/NIE/pasaporte 26×32 mm (cabeza 20–25 mm), Schengen 35×45 (32–36 mm), Reino Unido 35×45 (29–34 mm), EE. UU. 2×2 in (25–35 mm), Canadá 50×70 (31–36 mm), China 33×48 (28–33 mm) y medida libre. La guía muestra la franja de tolerancia.
 - **Ajustes**: mover, zoom (también con pellizco), inclinación, espejo, brillo, contraste y **sombras** (aclara solo las zonas oscuras, como media cara en sombra).
+- **Fondo blanco con IA**: usa [MODNet](https://huggingface.co/Xenova/modnet) (licencia Apache-2.0), un modelo de recorte de retratos que respeta el pelo, ejecutado en el propio navegador con [Transformers.js](https://huggingface.co/docs/transformers.js). La primera vez descarga unos 25 MB de Hugging Face y jsDelivr; después queda en la caché del navegador. La foto no sale del móvil. Quita también la contaminación de color de la pared en los bordes del pelo. Si la IA no carga (sin conexión o navegador antiguo), usa un método simple por color.
 - **Exportación** a 300 ppp en JPG: foto individual u hoja 10×15 cm con líneas de corte.
 
 ## Publicar con GitHub Pages
