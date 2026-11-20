@@ -59,7 +59,10 @@ small{color:var(--mut);font-size:13px}
 #frame svg{position:absolute;inset:0;width:100%;height:100%}
 #count{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:120px;font-weight:800;pointer-events:none;text-shadow:0 4px 20px #000}
 #live .bar{display:flex;align-items:center;justify-content:space-around;gap:10px;padding:16px max(16px,env(safe-area-inset-left)) max(20px,env(safe-area-inset-bottom));background:#000;color:#fff}
-#live .bar button{background:none;border:0;color:#fff;font:inherit;font-size:14px;min-width:72px;min-height:48px;cursor:pointer}
+#live .bar button{flex:1 1 0;background:none;border:0;color:#fff;font:inherit;font-size:13px;line-height:1.2;min-height:48px;padding:4px;cursor:pointer;overflow-wrap:anywhere}
+#live .bar #shut{flex:none}
+#lnote{position:absolute;left:12px;right:12px;top:max(14px,env(safe-area-inset-top));text-align:center;color:#fff;font-size:14px;text-shadow:0 1px 6px #000;pointer-events:none}
+#live.lit,#live.lit .bar{background:#fff}#live.lit #frame{box-shadow:0 0 0 100vmax #fff;border-color:#e4002b}#live.lit .bar button{color:#111}#live.lit #lnote{color:#111;text-shadow:none}
 #shut{width:74px;height:74px;border-radius:50%;border:4px solid #fff!important;background:var(--red)!important;box-shadow:inset 0 0 0 4px #000}
 #live .bar button[aria-pressed=true]{color:var(--red);font-weight:700}
 @media(max-width:600px){.tips{grid-template-columns:minmax(0,1fr)}.btns{grid-template-columns:minmax(0,1fr)}.btn{min-height:50px}}
@@ -98,6 +101,7 @@ small{color:var(--mut);font-size:13px}
     <div class="ctl"><label for="r">Inclinación</label><input type="range" id="r" min="-15" max="15" step="0.5" value="0"><output id="ro">0°</output></div>
     <div class="ctl"><label for="b">Brillo</label><input type="range" id="b" min="-40" max="40" step="1" value="0"><output id="bo">0</output></div>
     <div class="ctl"><label for="c">Contraste</label><input type="range" id="c" min="-40" max="40" step="1" value="0"><output id="co">0</output></div>
+    <div class="ctl"><label for="s">Sombras</label><input type="range" id="s" min="0" max="100" step="1" value="0"><output id="so">0</output></div>
     <label class="check"><input type="checkbox" id="g" checked> Mostrar guías</label>
     <div class="row">
       <button class="btn" id="flip" type="button">Voltear espejo</button>
@@ -128,11 +132,12 @@ small{color:var(--mut);font-size:13px}
 <div id="live" role="dialog" aria-label="Cámara">
   <div class="vw"><video id="vid" playsinline muted autoplay></video>
     <div id="frame"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><ellipse id="ov" cx="50" cy="45" rx="27" ry="37" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="6 5"/></svg></div>
-    <div id="count"></div>
+    <div id="count"></div><div id="lnote" role="status"></div>
   </div>
   <div class="bar">
     <button type="button" id="lClose">Cerrar</button>
-    <button type="button" id="lTimer" aria-pressed="false">Temporizador 3 s</button>
+    <button type="button" id="lTimer" aria-pressed="false" aria-label="Temporizador de 3 segundos">Cuenta 3 s</button>
+    <button type="button" id="lTorch" aria-pressed="false">Linterna</button>
     <button type="button" id="shut" aria-label="Hacer foto"></button>
     <button type="button" id="lSwitch">Cambiar cámara</button>
   </div>
@@ -154,7 +159,7 @@ try{curId=localStorage.getItem('fc-size')||'es'}catch(e){}
 if(!P.some(p=>p.id===curId))curId='es';
 const cur=()=>{const p=P.find(p=>p.id===curId);if(p.id!=='x')return p;const w=+$('#cw').value||35,h=+$('#ch').value||45;return {...p,w:Math.min(100,Math.max(15,w)),h:Math.min(100,Math.max(15,h))}};
 
-const st={img:null,z:1,ox:0,oy:0,rot:0,br:0,ct:0,flip:false};
+const st={img:null,z:1,ox:0,oy:0,rot:0,br:0,ct:0,sh:0,flip:false};
 const cv=$('#cv'),ctx=cv.getContext('2d');
 
 function chips(){
@@ -172,10 +177,28 @@ function paint(c,W,H){
   }
   c.restore();
 }
+// Mapa de luz difuminado: sirve para aclarar solo las zonas en sombra (p. ej. media cara oscura)
+function lightMap(src,W,H){
+  const step=(s,w,h)=>{const n=document.createElement('canvas');n.width=w;n.height=h;const x=n.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(s,0,0,w,h);return n};
+  const m=step(src,Math.max(8,Math.round(W/6)),Math.max(8,Math.round(H/6)));
+  const s=step(m,Math.max(4,Math.round(W/32)),Math.max(4,Math.round(H/32)));
+  return step(s,W,H).getContext('2d').getImageData(0,0,W,H).data;
+}
 function adjust(c,W,H){
-  if(!st.br&&!st.ct)return;
+  if(!st.br&&!st.ct&&!st.sh)return;
   const d=c.getImageData(0,0,W,H),a=d.data,b=st.br*2.55,C=st.ct*2.55,f=259*(C+255)/(255*(259-C));
-  for(let k=0;k<a.length;k+=4){for(let j=0;j<3;j++){a[k+j]=f*(a[k+j]+b-128)+128}}
+  const amt=st.sh/100,B=amt?lightMap(c.canvas,W,H):null;
+  for(let k=0;k<a.length;k+=4){
+    let r=a[k],g=a[k+1],bl=a[k+2];
+    if(B){
+      const L=(.299*r+.587*g+.114*bl)/255,Lb=(.299*B[k]+.587*B[k+1]+.114*B[k+2])/255;
+      let gain=Math.pow(.62/Math.max(Lb,.04),amt*.85);
+      gain=Math.min(2.6,Math.max(1,gain))*(1+amt*1.1*(1-L)**3);
+      const lim=Math.max(r,g,bl)*gain;if(lim>245)gain*=245/lim+(1-245/lim)*.35;
+      r*=gain;g*=gain;bl*=gain;
+    }
+    a[k]=f*(r+b-128)+128;a[k+1]=f*(g+b-128)+128;a[k+2]=f*(bl+b-128)+128;
+  }
   c.putImageData(d,0,0);
 }
 function guides(c,W,H,p,ghost){
@@ -212,10 +235,10 @@ const ro=new ResizeObserver(size);ro.observe($('#stage'));
 function sync(){
   $('#z').value=st.z;$('#zo').value=Math.round(st.z*100)+'%';
   $('#r').value=st.rot;$('#ro').value=st.rot+'°';
-  $('#b').value=st.br;$('#bo').value=st.br;$('#c').value=st.ct;$('#co').value=st.ct;
+  $('#b').value=st.br;$('#bo').value=st.br;$('#c').value=st.ct;$('#co').value=st.ct;$('#s').value=st.sh;$('#so').value=st.sh;
 }
 function setZ(z){st.z=Math.min(4,Math.max(.5,z));sync()}
-function resetSt(){Object.assign(st,{z:1,ox:0,oy:0,rot:0,br:0,ct:0});sync();draw()}
+function resetSt(){Object.assign(st,{z:1,ox:0,oy:0,rot:0,br:0,ct:0,sh:0});sync();draw()}
 
 function load(file){
   if(!file)return;
@@ -237,8 +260,23 @@ async function openLive(f){
   vid.srcObject=stream;vid.classList.toggle('mir',facing==='user');
   const p=cur();$('#frame').style.aspectRatio=p.w+'/'+p.h;
   const ov=$('#ov'),ry=p.head*50;ov.setAttribute('cy',p.top*100+ry);ov.setAttribute('ry',ry);ov.setAttribute('rx',p.head*36*p.h/p.w);
+  torchOn=false;lit=false;$('#live').classList.remove('lit');$('#lTorch').setAttribute('aria-pressed','false');
+  $('#lTorch').textContent=facing==='user'?'Luz':'Linterna';note('');
   $('#live').classList.add('on');document.body.style.overflow='hidden';
 }
+let torchOn=false,lit=false,noteT=0;
+function note(t){const n=$('#lnote');n.textContent=t;clearTimeout(noteT);if(t)noteT=setTimeout(()=>n.textContent='',3500)}
+$('#lTorch').addEventListener('click',async()=>{
+  const b=$('#lTorch'),t=stream&&stream.getVideoTracks()[0],caps=t&&t.getCapabilities?t.getCapabilities():{};
+  if(caps.torch){
+    torchOn=!torchOn;
+    try{await t.applyConstraints({advanced:[{torch:torchOn}]})}catch(e){torchOn=false;note('No se pudo encender la linterna.')}
+    b.setAttribute('aria-pressed',torchOn);
+  }else if(facing==='user'){
+    lit=!lit;$('#live').classList.toggle('lit',lit);b.setAttribute('aria-pressed',lit);
+    if(lit)note('Sube el brillo de la pantalla al máximo para más luz.');
+  }else note('Este navegador no permite encender la linterna. Prueba con Chrome en Android.');
+});
 function stopLive(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
 function closeLive(){stopLive();$('#live').classList.remove('on');document.body.style.overflow=''}
 function snap(){
@@ -276,6 +314,7 @@ $('#z').addEventListener('input',e=>{setZ(+e.target.value);draw()});
 $('#r').addEventListener('input',e=>{st.rot=+e.target.value;sync();draw()});
 $('#b').addEventListener('input',e=>{st.br=+e.target.value;sync();draw()});
 $('#c').addEventListener('input',e=>{st.ct=+e.target.value;sync();draw()});
+$('#s').addEventListener('input',e=>{st.sh=+e.target.value;sync();draw()});
 $('#g').addEventListener('change',draw);
 $('#flip').addEventListener('click',()=>{st.flip=!st.flip;draw()});
 $('#reset').addEventListener('click',resetSt);

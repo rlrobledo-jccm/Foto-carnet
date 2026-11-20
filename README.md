@@ -7,9 +7,10 @@ Todo se procesa en el navegador; las fotos no se suben a ningún servidor.
 ## Funciones
 
 - **Cámara en directo** (frontal o trasera) con guía de encuadre y temporizador de 3 s. Si el navegador no da acceso, usa la cámara nativa del móvil.
+- **Linterna**: con la cámara trasera enciende el LED del móvil (funciona en Chrome para Android; en iPhone depende de la versión de iOS). Con la selfie, la pantalla se pone en blanco para iluminar la cara.
 - **Galería**: también puedes partir de una foto que ya tengas.
 - **Tamaños**: España (DNI, NIE, pasaporte · 26×32 mm), UE/Schengen y Reino Unido (35×45), EE. UU. (2×2 in), Canadá (50×70), China (33×48) y medida libre.
-- **Ajustes**: mover, zoom (también con pellizco), inclinación, espejo, brillo y contraste.
+- **Ajustes**: mover, zoom (también con pellizco), inclinación, espejo, brillo, contraste y **sombras** (aclara solo las zonas oscuras, como media cara en sombra).
 - **Exportación** a 300 ppp en JPG: foto individual u hoja 10×15 cm con líneas de corte.
 
 ## Publicar con GitHub Pages
