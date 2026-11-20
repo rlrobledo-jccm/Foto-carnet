@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Foto de carnet</title>
+<meta name="description" content="Haz fotos de carnet con la cámara selfie o trasera, encuádralas y descarga una hoja 10×15 lista para imprimir.">
+<meta name="theme-color" content="#e4002b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: precise, calm photo-booth tool, no fuss
+   IDEA: a photomaton: frame with guides, then a cut sheet of copies
+   PICTURE: the crop frame itself, with crown/chin/eye guides
+   COLOUR and TYPE: white, black, signal red; Archivo wide 800 + Archivo
+   LAYOUT: one column: size chips, frame, camera buttons, adjust, export */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0e0e0e);--ink:light-dark(#111,#f2f2f2);--mut:light-dark(#666,#a3a3a3);--line:light-dark(#e2e2e2,#2a2a2a);--soft:light-dark(#f4f4f4,#1a1a1a);--red:#e4002b}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Archivo,system-ui,sans-serif;overflow-x:clip}
+.wrap{max-width:760px;margin:0 auto;padding:clamp(20px,4vw,48px) max(5vw,16px) 56px}
+h1{font-size:clamp(32px,7vw,48px);line-height:1.05;font-weight:800;font-stretch:112%;margin:0 0 6px;text-wrap:balance;border-top:6px solid var(--ink);padding-top:14px}
+.sub{color:var(--mut);margin:0 0 22px}
+h2{font-size:17px;font-weight:700;margin:28px 0 10px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.chip{flex:none;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:8px 12px;min-height:44px;text-align:left;font:inherit;cursor:pointer}
+.chip b{display:block;font-size:15px}.chip span{font-size:13px;color:var(--mut);white-space:nowrap}
+.chip[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.custom{display:none;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}.custom.on{display:flex}
+.custom input{width:84px;font:inherit;font-size:16px;padding:8px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+#stage{display:flex;flex-direction:column;align-items:center;margin-top:20px;padding:22px 12px;background:var(--soft);border-radius:14px}
+#cv{touch-action:none;background:#fff;box-shadow:0 1px 0 #0002,0 12px 30px -12px #0005;cursor:grab;display:block}
+.dim{font-size:13px;color:var(--mut);margin-top:10px;white-space:nowrap}
+.btns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px;width:100%;max-width:460px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--ink);background:var(--bg);color:var(--ink);font:inherit;font-weight:600;font-size:15px;cursor:pointer;text-align:center;line-height:1.2}
+.btn.pri{background:var(--red);border-color:var(--red);color:#fff}
+.btn svg{width:20px;height:20px;flex:none}
+.btn:focus-visible,.chip:focus-visible,input:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+label.btn input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.ctl{display:grid;grid-template-columns:7.5em minmax(0,1fr) 3.5em;gap:10px;align-items:center;min-height:44px}
+.ctl label{font-size:15px}.ctl output{font-size:13px;color:var(--mut);text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--red);height:32px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.row .btn{flex:1 1 140px}
+.check{display:flex;align-items:center;gap:10px;min-height:44px;font-size:15px}.check input{width:20px;height:20px;accent-color:var(--red)}
+#out{display:none;margin-top:16px;padding:14px;border:1.5px solid var(--line);border-radius:12px}#out.on{display:block}
+#out img{display:block;max-width:100%;max-height:340px;margin:0 auto;box-shadow:0 6px 20px -10px #0006}
+#msg{font-size:14px;color:var(--mut);margin:10px 0 0;text-align:center}
+.tips{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 22px}
+.tips li{border-top:1.5px solid var(--line);padding-top:8px;font-size:15px}.tips b{display:block}
+small{color:var(--mut);font-size:13px}
+.off{opacity:.45;pointer-events:none}
+#live{position:fixed;inset:0;z-index:9;background:#000;display:none;flex-direction:column}#live.on{display:flex}
+#live .vw{position:relative;flex:1;overflow:hidden}
+#live video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}#live video.mir{transform:scaleX(-1)}
+#frame{position:absolute;left:50%;top:50%;height:72%;max-width:86%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 0 0 100vmax #0007;border-radius:4px}
+#frame svg{position:absolute;inset:0;width:100%;height:100%}
+#count{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:120px;font-weight:800;pointer-events:none;text-shadow:0 4px 20px #000}
+#live .bar{display:flex;align-items:center;justify-content:space-around;gap:10px;padding:16px max(16px,env(safe-area-inset-left)) max(20px,env(safe-area-inset-bottom));background:#000;color:#fff}
+#live .bar button{background:none;border:0;color:#fff;font:inherit;font-size:14px;min-width:72px;min-height:48px;cursor:pointer}
+#shut{width:74px;height:74px;border-radius:50%;border:4px solid #fff!important;background:var(--red)!important;box-shadow:inset 0 0 0 4px #000}
+#live .bar button[aria-pressed=true]{color:var(--red);font-weight:700}
+@media(max-width:600px){.tips{grid-template-columns:minmax(0,1fr)}.btns{grid-template-columns:minmax(0,1fr)}.btn{min-height:50px}}
+@media(prefers-reduced-motion:no-preference){#out.on{animation:up .35s ease-out}@keyframes up{from{opacity:0;transform:translateY(8px)}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Foto de carnet</h1>
+  <p class="sub">Haz la foto con la cámara selfie o la trasera, encuadra la cara en la guía y descarga la foto o una hoja 10×15 lista para imprimir.</p>
+
+  <h2>1 · Tamaño</h2>
+  <div class="chips" id="chips"></div>
+  <div class="custom" id="custom">
+    <span>Ancho</span><input id="cw" type="number" inputmode="decimal" min="15" max="100" value="35"><span>mm</span>
+    <span>Alto</span><input id="ch" type="number" inputmode="decimal" min="15" max="100" value="45"><span>mm</span>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv" aria-label="Encuadre de la foto: arrastra para mover, pellizca para ampliar"></canvas>
+    <div class="dim" id="dim"></div>
+    <div class="btns">
+      <label class="btn pri"><input type="file" accept="image/*" capture="user" id="fSelfie">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="9" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Cámara selfie</label>
+      <label class="btn"><input type="file" accept="image/*" capture="environment" id="fBack">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h4l2-3h6l2 3h4v12H3z"/><circle cx="12" cy="13" r="4"/></svg>Cámara trasera</label>
+      <label class="btn"><input type="file" accept="image/*" id="fGal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 17 5-5 4 4 3-3 6 6"/></svg>Galería</label>
+    </div>
+  </div>
+
+  <div id="adj" class="off">
+    <h2>2 · Ajusta</h2>
+    <p class="sub" style="margin:0 0 6px">Arrastra la foto para moverla. La coronilla va en la línea roja de arriba y la barbilla en la de abajo.</p>
+    <div class="ctl"><label for="z">Zoom</label><input type="range" id="z" min="0.5" max="4" step="0.01" value="1"><output id="zo">100%</output></div>
+    <div class="ctl"><label for="r">Inclinación</label><input type="range" id="r" min="-15" max="15" step="0.5" value="0"><output id="ro">0°</output></div>
+    <div class="ctl"><label for="b">Brillo</label><input type="range" id="b" min="-40" max="40" step="1" value="0"><output id="bo">0</output></div>
+    <div class="ctl"><label for="c">Contraste</label><input type="range" id="c" min="-40" max="40" step="1" value="0"><output id="co">0</output></div>
+    <label class="check"><input type="checkbox" id="g" checked> Mostrar guías</label>
+    <div class="row">
+      <button class="btn" id="flip" type="button">Voltear espejo</button>
+      <button class="btn" id="reset" type="button">Restablecer</button>
+    </div>
+
+    <h2>3 · Descarga</h2>
+    <div class="row">
+      <button class="btn pri" id="dSheet" type="button">Hoja 10×15 cm</button>
+      <button class="btn" id="dOne" type="button">Solo la foto</button>
+    </div>
+    <p class="dim" id="fit" style="white-space:normal"></p>
+    <div id="out"><img id="outImg" alt="Resultado"><p id="msg"></p></div>
+  </div>
+
+  <h2>Para que te la acepten</h2>
+  <ul class="tips">
+    <li><b>Fondo liso y claro</b>Una pared blanca o gris claro, sin sombras detrás.</li>
+    <li><b>Luz de frente</b>Mirando a una ventana; evita luz cenital o de un lado.</li>
+    <li><b>Móvil a la altura de los ojos</b>A un brazo de distancia o apoyado; nada de picados.</li>
+    <li><b>Expresión neutra</b>Boca cerrada, mirada a la cámara, cabeza recta.</li>
+    <li><b>Cara despejada</b>Sin gafas de sol ni reflejos; el pelo no tapa ojos ni cejas.</li>
+    <li><b>Imprime a 10×15</b>En cualquier tienda de fotos o quiosco, sin «ajustar a página».</li>
+  </ul>
+  <p><small>Las medidas son las habituales de cada documento; comprueba siempre los requisitos actuales del organismo que la pide.</small></p>
+</div>
+
+<div id="live" role="dialog" aria-label="Cámara">
+  <div class="vw"><video id="vid" playsinline muted autoplay></video>
+    <div id="frame"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><ellipse id="ov" cx="50" cy="45" rx="27" ry="37" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="6 5"/></svg></div>
+    <div id="count"></div>
+  </div>
+  <div class="bar">
+    <button type="button" id="lClose">Cerrar</button>
+    <button type="button" id="lTimer" aria-pressed="false">Temporizador 3 s</button>
+    <button type="button" id="shut" aria-label="Hacer foto"></button>
+    <button type="button" id="lSwitch">Cambiar cámara</button>
+  </div>
+</div>
+
+<script>
+{
+const $=s=>document.querySelector(s);
+const P=[
+  {id:'es',n:'España',d:'DNI · NIE · pasaporte',w:26,h:32,head:.74,top:.08},
+  {id:'eu',n:'UE / Schengen',d:'Visado · Reino Unido',w:35,h:45,head:.76,top:.07},
+  {id:'us',n:'EE. UU.',d:'2×2 in · pasaporte',w:51,h:51,head:.6,top:.12},
+  {id:'ca',n:'Canadá',d:'Pasaporte',w:50,h:70,head:.48,top:.17},
+  {id:'cn',n:'China',d:'Visado',w:33,h:48,head:.66,top:.08},
+  {id:'x',n:'Otro',d:'Medida libre',w:35,h:45,head:.74,top:.08}
+];
+let curId='es';
+try{curId=localStorage.getItem('fc-size')||'es'}catch(e){}
+if(!P.some(p=>p.id===curId))curId='es';
+const cur=()=>{const p=P.find(p=>p.id===curId);if(p.id!=='x')return p;const w=+$('#cw').value||35,h=+$('#ch').value||45;return {...p,w:Math.min(100,Math.max(15,w)),h:Math.min(100,Math.max(15,h))}};
+
+const st={img:null,z:1,ox:0,oy:0,rot:0,br:0,ct:0,flip:false};
+const cv=$('#cv'),ctx=cv.getContext('2d');
+
+function chips(){
+  $('#chips').innerHTML=P.map(p=>`<button type="button" class="chip" data-id="${p.id}" aria-pressed="${p.id===curId}"><b>${p.n}</b><span>${p.id==='x'?p.d:p.w+'×'+p.h+' mm · '+p.d}</span></button>`).join('');
+  $('#custom').classList.toggle('on',curId==='x');
+}
+
+function paint(c,W,H){
+  c.save();c.fillStyle='#fff';c.fillRect(0,0,W,H);
+  const i=st.img;
+  if(i){
+    const iw=i.naturalWidth,ih=i.naturalHeight,s=Math.max(W/iw,H/ih)*st.z;
+    c.translate(W/2+st.ox*H,H/2+st.oy*H);c.rotate(st.rot*Math.PI/180);c.scale(st.flip?-s:s,s);
+    c.imageSmoothingQuality='high';c.drawImage(i,-iw/2,-ih/2);
+  }
+  c.restore();
+}
+function adjust(c,W,H){
+  if(!st.br&&!st.ct)return;
+  const d=c.getImageData(0,0,W,H),a=d.data,b=st.br*2.55,C=st.ct*2.55,f=259*(C+255)/(255*(259-C));
+  for(let k=0;k<a.length;k+=4){for(let j=0;j<3;j++){a[k+j]=f*(a[k+j]+b-128)+128}}
+  c.putImageData(d,0,0);
+}
+function guides(c,W,H,p,ghost){
+  const top=p.top*H,head=p.head*H,chin=top+head,cx=W/2,rx=head*.36,ry=head/2,cy=top+ry;
+  if(ghost){
+    c.fillStyle='#e9e9e9';
+    c.beginPath();c.ellipse(cx,cy,rx,ry,0,0,7);c.fill();
+    c.beginPath();c.moveTo(cx-rx*.55,chin-head*.05);c.quadraticCurveTo(cx-W*.5,chin+head*.08,cx-W*.55,H);c.lineTo(cx+W*.55,H);c.quadraticCurveTo(cx+W*.5,chin+head*.08,cx+rx*.55,chin-head*.05);c.fill();
+  }
+  const lw=Math.max(1,W/260);
+  c.lineWidth=lw;c.strokeStyle='rgba(228,0,43,.9)';c.setLineDash([lw*5,lw*4]);
+  [top,chin].forEach(y=>{c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke()});
+  c.setLineDash([]);c.strokeStyle='rgba(228,0,43,.55)';
+  c.beginPath();c.ellipse(cx,cy,rx,ry,0,0,7);c.stroke();
+  c.strokeStyle='rgba(0,0,0,.25)';c.setLineDash([lw*2,lw*4]);
+  const eye=top+head*.48;c.beginPath();c.moveTo(cx-rx*1.5,eye);c.lineTo(cx+rx*1.5,eye);c.stroke();
+  c.beginPath();c.moveTo(cx,0);c.lineTo(cx,H);c.stroke();c.setLineDash([]);
+}
+function draw(){
+  const W=cv.width,H=cv.height,p=cur();
+  paint(ctx,W,H);adjust(ctx,W,H);
+  if(!st.img)guides(ctx,W,H,p,true);
+  else if($('#g').checked)guides(ctx,W,H,p,false);
+}
+function size(){
+  const p=cur(),box=$('#stage'),maxW=Math.min(box.clientWidth-24,400),maxH=Math.min(innerHeight*.55,480),a=p.w/p.h;
+  let w=maxW,h=w/a;if(h>maxH){h=maxH;w=h*a}
+  const r=devicePixelRatio||1;cv.style.width=w+'px';cv.style.height=h+'px';cv.width=Math.round(w*r);cv.height=Math.round(h*r);
+  $('#dim').textContent=`${p.w} × ${p.h} mm · ${Math.round(p.w/25.4*300)}×${Math.round(p.h/25.4*300)} px a 300 ppp`;
+  fitText();draw();
+}
+const ro=new ResizeObserver(size);ro.observe($('#stage'));
+
+function sync(){
+  $('#z').value=st.z;$('#zo').value=Math.round(st.z*100)+'%';
+  $('#r').value=st.rot;$('#ro').value=st.rot+'°';
+  $('#b').value=st.br;$('#bo').value=st.br;$('#c').value=st.ct;$('#co').value=st.ct;
+}
+function setZ(z){st.z=Math.min(4,Math.max(.5,z));sync()}
+function resetSt(){Object.assign(st,{z:1,ox:0,oy:0,rot:0,br:0,ct:0});sync();draw()}
+
+function load(file){
+  if(!file)return;
+  const url=URL.createObjectURL(file),im=new Image();
+  im.onload=()=>{st.img=im;st.flip=false;resetSt();$('#adj').classList.remove('off');$('#out').classList.remove('on')};
+  im.onerror=()=>{$('#dim').textContent='No se pudo abrir esa imagen. Prueba con JPG o PNG.'};
+  im.src=url;
+}
+['#fSelfie','#fBack','#fGal'].forEach(id=>$(id).addEventListener('change',e=>{load(e.target.files[0]);e.target.value=''}));
+
+// Cámara en directo (funciona en HTTPS, p. ej. GitHub Pages). Si no hay permiso, se usa la cámara nativa.
+let stream=null,facing='user',canLive=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.isSecureContext&&!window.claude);
+const vid=$('#vid');
+async function openLive(f){
+  facing=f;stopLive();
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1920}},audio:false});
+  }catch(e){canLive=false;$('#dim').textContent='No hay acceso a la cámara en directo; pulsa otra vez para usar la cámara del móvil.';closeLive();return}
+  vid.srcObject=stream;vid.classList.toggle('mir',facing==='user');
+  const p=cur();$('#frame').style.aspectRatio=p.w+'/'+p.h;
+  const ov=$('#ov'),ry=p.head*50;ov.setAttribute('cy',p.top*100+ry);ov.setAttribute('ry',ry);ov.setAttribute('rx',p.head*36*p.h/p.w);
+  $('#live').classList.add('on');document.body.style.overflow='hidden';
+}
+function stopLive(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
+function closeLive(){stopLive();$('#live').classList.remove('on');document.body.style.overflow=''}
+function snap(){
+  const w=vid.videoWidth,h=vid.videoHeight;if(!w)return;
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(vid,0,0);
+  closeLive();c.toBlob(b=>load(b),'image/jpeg',.95);
+}
+let timing=false;
+$('#shut').addEventListener('click',()=>{
+  if(timing)return;
+  if($('#lTimer').getAttribute('aria-pressed')!=='true')return snap();
+  timing=true;let n=3;const el=$('#count');el.textContent=n;
+  const t=setInterval(()=>{n--;if(n>0)el.textContent=n;else{clearInterval(t);el.textContent='';timing=false;snap()}},1000);
+});
+$('#lTimer').addEventListener('click',e=>{const b=e.currentTarget;b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true')});
+$('#lSwitch').addEventListener('click',()=>openLive(facing==='user'?'environment':'user'));
+$('#lClose').addEventListener('click',closeLive);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&stream)closeLive()});
+[['#fSelfie','user'],['#fBack','environment']].forEach(([id,f])=>$(id).closest('label').addEventListener('click',e=>{if(canLive&&e.target.tagName!=='INPUT'){e.preventDefault();openLive(f)}}));
+
+const pts=new Map();
+cv.addEventListener('pointerdown',e=>{if(!st.img)return;cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY})});
+cv.addEventListener('pointermove',e=>{
+  const prev=pts.get(e.pointerId);if(!prev)return;
+  const H=cv.clientHeight;
+  if(pts.size===1){st.ox+=(e.clientX-prev.x)/H;st.oy+=(e.clientY-prev.y)/H}
+  else{const o=[...pts].find(([k])=>k!==e.pointerId)[1],d0=Math.hypot(prev.x-o.x,prev.y-o.y),d1=Math.hypot(e.clientX-o.x,e.clientY-o.y);if(d0>4)setZ(st.z*d1/d0)}
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});draw();
+});
+const up=e=>pts.delete(e.pointerId);
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('wheel',e=>{if(!st.img)return;e.preventDefault();setZ(st.z*Math.exp(-e.deltaY*.0015));draw()},{passive:false});
+
+$('#z').addEventListener('input',e=>{setZ(+e.target.value);draw()});
+$('#r').addEventListener('input',e=>{st.rot=+e.target.value;sync();draw()});
+$('#b').addEventListener('input',e=>{st.br=+e.target.value;sync();draw()});
+$('#c').addEventListener('input',e=>{st.ct=+e.target.value;sync();draw()});
+$('#g').addEventListener('change',draw);
+$('#flip').addEventListener('click',()=>{st.flip=!st.flip;draw()});
+$('#reset').addEventListener('click',resetSt);
+$('#chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;curId=b.dataset.id;try{localStorage.setItem('fc-size',curId)}catch(err){}chips();size();$('#out').classList.remove('on')});
+['#cw','#ch'].forEach(id=>$(id).addEventListener('input',size));
+
+const MM=300/25.4;
+function photo(){const p=cur(),W=Math.round(p.w*MM),H=Math.round(p.h*MM),c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');paint(x,W,H);adjust(x,W,H);return c}
+function layout(pw,ph,W,H){const g=Math.round(3*MM),cols=Math.floor((W-g)/(pw+g)),rows=Math.floor((H-g)/(ph+g));return {cols,rows,n:cols*rows,g,W,H}}
+function bestLayout(){const p=cur(),pw=Math.round(p.w*MM),ph=Math.round(p.h*MM),a=layout(pw,ph,1800,1200),b=layout(pw,ph,1200,1800);return {L:a.n>=b.n?a:b,pw,ph}}
+function fitText(){const {L}=bestLayout();$('#fit').textContent=L.n?`La hoja 10×15 cm lleva ${L.n} copias con líneas de corte. Imprímela a tamaño real.`:'Esta medida no cabe en una hoja 10×15.'}
+function sheet(){
+  const {L,pw,ph}=bestLayout(),one=photo(),c=document.createElement('canvas');c.width=L.W;c.height=L.H;
+  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,L.W,L.H);
+  const tw=L.cols*pw+(L.cols-1)*L.g,th=L.rows*ph+(L.rows-1)*L.g,x0=Math.round((L.W-tw)/2),y0=Math.round((L.H-th)/2);
+  x.strokeStyle='#c8c8c8';x.lineWidth=2;
+  for(let r=0;r<L.rows;r++)for(let k=0;k<L.cols;k++){const px=x0+k*(pw+L.g),py=y0+r*(ph+L.g);x.drawImage(one,px,py);x.strokeRect(px-1,py-1,pw+2,ph+2)}
+  return c;
+}
+
+const dlP=(window.claude&&claude.use)?claude.use('downloads').catch(()=>null):Promise.resolve(null);
+async function deliver(c,name){
+  const outImg=$('#outImg'),msg=$('#msg');
+  outImg.src=c.toDataURL('image/jpeg',.95);$('#out').classList.add('on');
+  msg.textContent='Preparando la descarga…';
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.95));
+  const dl=await dlP;
+  if(!dl){
+    const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),60000);
+    msg.textContent='Descargada. Si no aparece, mantén pulsada la imagen (o clic derecho) para guardarla.';return}
+  try{await dl.save({filename:name,data:blob});msg.textContent='Listo. Si no ves el archivo, mantén pulsada la imagen para guardarla.'}
+  catch(e){msg.textContent=e&&e.code==='declined'?'Descarga cancelada. También puedes mantener pulsada la imagen para guardarla.':'Mantén pulsada la imagen (o clic derecho) para guardarla.'}
+}
+$('#dSheet').addEventListener('click',()=>{if(!st.img)return;const p=cur();deliver(sheet(),`fotos-carnet-${p.w}x${p.h}mm-hoja-10x15.jpg`)});
+$('#dOne').addEventListener('click',()=>{if(!st.img)return;const p=cur();deliver(photo(),`foto-carnet-${p.w}x${p.h}mm.jpg`)});
+
+chips();sync();size();
+}
+</script>
+</body>
+</html>
